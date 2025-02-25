@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>实时订单管理系统</title>
+    <style>
+        /* 基础样式 */
+        body {
+            font-family: "Microsoft YaHei", sans-serif;
+            background: #f5f5f7;
+            padding: 20px;
+            margin: 0;
+        }
+
+        /* 顶部控制栏 */
+        .control-bar {
+            max-width: 800px;
+            margin: 0 auto 20px;
+            display: flex;
+            gap: 10px;
+        }
+
+        #searchBox {
+            flex: 1;
+            padding: 12px;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            font-size: 16px;
+        }
+
+        #refreshBtn {
+            padding: 12px 25px;
+            background: #007bff;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: opacity 0.2s;
+        }
+
+        /* 状态标签修正 */
+        .status {
+            background: #e8f5e9;
+            color: #43a047;
+            padding: 4px 12px;
+            border-radius: 15px;
+            font-size: 12px;
+            white-space: nowrap;
+            height: fit-content;
+        }
+
+        /* 订单卡片 */
+        .order-card {
+            background: white;
+            border-radius: 12px;
+            padding: 20px;
+            margin-bottom: 15px;
+            box-shadow: 0 2px 12px rgba(0,0,0,0.08);
+        }
+
+        .order-header {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 15px;
+            gap: 15px;
+        }
+
+        /* 二维码区域 */
+        .toggle-btn {
+            color: #007bff;
+            cursor: pointer;
+            margin-top: 15px;
+            display: inline-block;
+        }
+
+        .qr-code {
+            display: none;
+            text-align: center;
+            margin-top: 15px;
+        }
+
+        /* 加载动画 */
+        .loading::after {
+            content: "";
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 3px solid rgba(0,123,255,0.2);
+            border-top-color: #007bff;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body>
+    <div class="control-bar">
+        <input type="text" id="searchBox" placeholder="输入订单号/学生姓名搜索...">
+        <button id="refreshBtn" onclick="manualRefresh()">立即刷新</button>
+    </div>
+
+    <div class="order-list">
+        <div class="loading">正在加载初始数据...</div>
+    </div>
+
+    <script>
+        // ==================== 配置区 ====================
+        const CONFIG = {
+            API_BASE: "https://api.vika.cn/fusion/v1/datasheets/dstqsX0BykMffmLRRy/records",
+            API_PARAMS: "viewId=viwrKkJnk9CLa&fieldKey=name",
+            API_TOKEN: process.env.VIKA_TOKEN, // 需配合GitHub Actions
+            AUTO_REFRESH: 300000 // 5分钟自动刷新
+        };
+
+        // ==================== 核心功能 ====================
+        let refreshTimer = null;
+
+        async function loadOrders() {
+            try {
+                const apiUrl = `${CONFIG.API_BASE}?${CONFIG.API_PARAMS}&_=${Date.now()}`;
+                const response = await fetch(apiUrl, {
+                    headers: { "Authorization": `Bearer ${CONFIG.API_TOKEN}` }
+                });
+                
+                const { code, data } = await response.json();
+                if (code === 200) {
+                    renderOrders(data.records.map(record => ({
+                        id: record.fields.订单号 || '无',
+                        student: record.fields.学生姓名 || '未填写',
+                        grade: record.fields.年级 || '未填写',
+                        subjects: record.fields.科目 || '未填写',
+                        status: record.fields.状态 || '进行中',
+                        description: record.fields.详细描述 || '未填写',
+                        teacher: record.fields.负责老师 || '暂无',
+                        qrCode: record.fields.二维码链接 || ''
+                    })));
+                }
+                refreshTimer = setTimeout(loadOrders, CONFIG.AUTO_REFRESH);
+            } catch (error) {
+                console.error("加载失败:", error);
+                refreshTimer = setTimeout(loadOrders, 10000);
+            }
+        }
+
+        function renderOrders(orders) {
+            const container = document.querySelector('.order-list');
+            container.innerHTML = orders.map(order => `
+                <div class="order-card">
+                    <div class="order-header">
+                        <div>
+                            <div class="order-id">订单号：${order.id}</div>
+                            <div>学生：${order.student}</div>
+                            <div>年级：${order.grade}</div>
+                            <div>科目：${order.subjects}</div>
+                            <div>详细描述：${order.description}</div>
+                            <div>负责老师：${order.teacher}</div>
+                        </div>
+                        <div class="status">${order.status}</div>
+                    </div>
+                    <div class="toggle-btn" onclick="toggleQR(this)">▼ 查看二维码</div>
+                    <div class="qr-code">
+                        ${order.qrCode ? 
+                            `<img src="${order.qrCode}" alt="二维码" width="150">` : 
+                            '<div style="color:#999;">暂无二维码</div>'
+                        }
+                    </div>
+                </div>
+            `).join('');
+
+            // 初始化搜索
+            document.getElementById('searchBox').addEventListener('input', function(e) {
+                const keyword = e.target.value.toLowerCase();
+                document.querySelectorAll('.order-card').forEach(card => {
+                    card.style.display = card.textContent.toLowerCase().includes(keyword) ? 'block' : 'none';
+                });
+            });
+        }
+
+        // ==================== 交互功能 ====================
+        function toggleQR(btn) {
+            const qrCode = btn.nextElementSibling;
+            qrCode.style.display = qrCode.style.display === 'none' ? 'block' : 'none';
+            btn.textContent = qrCode.style.display === 'none' ? '▼ 查看二维码' : '▲ 收起二维码';
+        }
+
+        function manualRefresh() {
+            clearTimeout(refreshTimer);
+            document.querySelector('.order-list').innerHTML = '<div class="loading">刷新数据中...</div>';
+            loadOrders();
+        }
+
+        // ==================== 初始化 ====================
+        loadOrders();
+    </script>
+</body>
+</html>
