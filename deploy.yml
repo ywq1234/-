@@ -1,0 +1,28 @@
+name: Deploy to GitHub Pages
+
+# 触发条件：当main分支有推送时运行
+on:
+  push:
+    branches: [ "main" ]
+
+jobs:
+  deploy:
+    # 使用最新版Ubuntu系统作为构建环境
+    runs-on: ubuntu-latest
+    
+    steps:
+      # 步骤1：拉取仓库代码
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      # 步骤2：创建.env文件并注入Token
+      - name: Create .env file
+        run: |
+          echo "VIKA_TOKEN=${{ secrets.VIKA_TOKEN }}" > .env
+          
+      # 步骤3：部署到GitHub Pages
+      - name: Deploy
+        uses: peaceiris/actions-gh-pages@v3
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./
