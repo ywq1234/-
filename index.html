@@ -5,22 +5,24 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>学生列表</title>
     <style>
-        /* 基础样式 */
+        /* 新增状态颜色样式 */
+        .status[data-status="已完成"] {
+            background: #A19144 !important;
+            color: #fff !important;
+        }
+        /* 原有样式保持不变 */
         body {
             font-family: "Microsoft YaHei", sans-serif;
             background: #f5f5f7;
             padding: 20px;
             margin: 0;
         }
-
-        /* 顶部控制栏 */
         .control-bar {
             max-width: 800px;
             margin: 0 auto 20px;
             display: flex;
             gap: 10px;
         }
-
         #searchBox {
             flex: 1;
             padding: 12px;
@@ -28,7 +30,6 @@
             border-radius: 8px;
             font-size: 16px;
         }
-
         #refreshBtn {
             padding: 12px 25px;
             background: #007bff;
@@ -38,8 +39,6 @@
             cursor: pointer;
             transition: opacity 0.2s;
         }
-
-        /* 状态标签修正 */
         .status {
             background: #e8f5e9;
             color: #43a047;
@@ -49,8 +48,6 @@
             white-space: nowrap;
             height: fit-content;
         }
-
-        /* 订单卡片 */
         .order-card {
             background: white;
             border-radius: 12px;
@@ -58,29 +55,23 @@
             margin-bottom: 15px;
             box-shadow: 0 2px 12px rgba(0,0,0,0.08);
         }
-
         .order-header {
             display: flex;
             justify-content: space-between;
             margin-bottom: 15px;
             gap: 15px;
         }
-
-        /* 二维码区域 */
         .toggle-btn {
             color: #007bff;
             cursor: pointer;
             margin-top: 15px;
             display: inline-block;
         }
-
         .qr-code {
             display: none;
             text-align: center;
             margin-top: 15px;
         }
-
-        /* 加载动画 */
         .loading::after {
             content: "";
             display: inline-block;
@@ -91,7 +82,6 @@
             border-radius: 50%;
             animation: spin 1s linear infinite;
         }
-
         @keyframes spin {
             to { transform: rotate(360deg); }
         }
@@ -99,7 +89,7 @@
 </head>
 <body>
     <div class="control-bar">
-        <input type="text" id="searchBox" placeholder="输入订单号/学生姓名搜索...">
+        <input type="text" id="searchBox" placeholder="输入订单号/地址...">
         <button id="refreshBtn" onclick="manualRefresh()">立即刷新</button>
     </div>
 
@@ -108,15 +98,13 @@
     </div>
 
     <script>
-        // ==================== 配置区 ====================
         const CONFIG = {
             API_BASE: "https://api.vika.cn/fusion/v1/datasheets/dstqsX0BykMffmLRRy/records",
             API_PARAMS: "viewId=viwrKkJnk9CLa&fieldKey=name",
             API_TOKEN: "uskpEOZ8n89RTWO5EaKySXN",
-            AUTO_REFRESH: 300000 // 5分钟自动刷新
+            AUTO_REFRESH: 300000
         };
 
-        // ==================== 核心功能 ====================
         let refreshTimer = null;
 
         async function loadOrders() {
@@ -133,6 +121,7 @@
                         student: record.fields.学生姓名 || '未填写',
                         grade: record.fields.年级 || '未填写',
                         subjects: record.fields.科目 || '未填写',
+                        dizhi: record.fields.地址 || '未填写',
                         status: record.fields.状态 || '进行中',
                         description: record.fields.详细描述 || '未填写',
                         teacher: record.fields.负责老师 || '暂无',
@@ -156,10 +145,11 @@
                             <div>学生：${order.student}</div>
                             <div>年级：${order.grade}</div>
                             <div>科目：${order.subjects}</div>
+                            <div>地址：${order.dizhi}</div>
                             <div>详细描述：${order.description}</div>
                             <div>负责老师：${order.teacher}</div>
                         </div>
-                        <div class="status">${order.status}</div>
+                        <div class="status" data-status="${order.status}">${order.status}</div>
                     </div>
                     <div class="toggle-btn" onclick="toggleQR(this)">▼ 查看二维码</div>
                     <div class="qr-code">
@@ -171,7 +161,6 @@
                 </div>
             `).join('');
 
-            // 初始化搜索
             document.getElementById('searchBox').addEventListener('input', function(e) {
                 const keyword = e.target.value.toLowerCase();
                 document.querySelectorAll('.order-card').forEach(card => {
@@ -180,11 +169,11 @@
             });
         }
 
-        // ==================== 交互功能 ====================
         function toggleQR(btn) {
             const qrCode = btn.nextElementSibling;
-            qrCode.style.display = qrCode.style.display === 'none' ? 'block' : 'none';
-            btn.textContent = qrCode.style.display === 'none' ? '▼ 查看二维码' : '▲ 收起二维码';
+            const isHidden = window.getComputedStyle(qrCode).display === 'none';
+            qrCode.style.display = isHidden ? 'block' : 'none';
+            btn.textContent = isHidden ? '▲ 收起二维码' : '▼ 查看二维码';
         }
 
         function manualRefresh() {
@@ -193,7 +182,6 @@
             loadOrders();
         }
 
-        // ==================== 初始化 ====================
         loadOrders();
     </script>
 </body>
