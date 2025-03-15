@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>腾讯云图片上传示例</title>
+    <script src="//imgcache.qq.com/qcloud/cloudbase-js-sdk/1.6.0/cloudbase.full.js"></script>
+</head>
+<body>
+    <h1>图片上传示例</h1>
+    
+    <!-- 文件选择区域 -->
+    <input type="file" id="fileInput" accept="image/*">
+    <button onclick="uploadImage()">上传图片</button>
+    
+    <!-- 显示上传状态 -->
+    <div id="status" style="margin: 20px 0; color: #666;"></div>
+    
+    <!-- 显示结果 -->
+    <div id="result" style="display: none;">
+        <h3>上传成功！</h3>
+        <p>文件地址：<a id="fileUrl" target="_blank"></a></p>
+        <img id="preview" style="max-width: 300px; margin-top: 10px;">
+    </div>
+
+    <script>
+        // 初始化SDK
+        const app = cloudbase.init({
+            env: 'analyze-4gbej3877844ea2d'
+        });
+        const auth = app.auth();
+
+        // 页面加载时自动匿名登录
+        (async function initAuth() {
+            try {
+                await auth.anonymousAuthProvider().signIn();
+                console.log('匿名登录成功');
+            } catch (error) {
+                console.error('匿名登录失败:', error);
+            }
+        })();
+
+        async function uploadImage() {
+            const fileInput = document.getElementById('fileInput');
+            const statusDiv = document.getElementById('status');
+            const resultDiv = document.getElementById('result');
+            const fileUrlLink = document.getElementById('fileUrl');
+            const previewImg = document.getElementById('preview');
+
+            // 检查文件是否选择
+            if (!fileInput.files.length) {
+                statusDiv.innerHTML = '请先选择要上传的图片！';
+                return;
+            }
+
+            const file = fileInput.files[0];
+            
+            try {
+                statusDiv.innerHTML = '上传中...';
+
+                // 生成云端路径：images/时间戳_文件名
+                const cloudPath = `images/${Date.now()}_${file.name}`;
+                
+                // 上传文件
+                const uploadRes = await app.uploadFile({
+                    cloudPath: cloudPath,
+                    filePath: file
+                });
+
+                // 获取临时访问链接
+                const { fileList } = await app.getTempFileURL({
+                    fileList: [uploadRes.fileID]
+                });
+
+                // 显示结果
+                resultDiv.style.display = 'block';
+                fileUrlLink.href = fileList[0].tempFileURL;
+                fileUrlLink.textContent = fileList[0].tempFileURL;
+                previewImg.src = fileList[0].tempFileURL;
+                statusDiv.innerHTML = '上传成功！';
+                
+            } catch (error) {
+                console.error('上传失败:', error);
+                statusDiv.innerHTML = `上传失败: ${error.message}`;
+                resultDiv.style.display = 'none';
+            }
+        }
+    </script>
+</body>
+</html>
