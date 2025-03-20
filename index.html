@@ -11,7 +11,6 @@
         <el-container style="max-width: 800px; margin: 20px auto;">
             <el-main>
                 <el-card>
-                    <!-- 界面结构保持不变 -->
                     <div slot="header">
                         <span>上传试卷文件</span>
                     </div>
@@ -24,7 +23,9 @@
                         action="#"
                         accept=".pdf,.jpg,.jpeg,.png"
                     >
-                        <!-- 上传组件内容 -->
+                        <i class="el-icon-upload"></i>
+                        <div class="el-upload__text">将文件拖到此处，或<em>点击选择</em></div>
+                        <div class="el-upload__tip" slot="tip">支持格式：PDF/JPG/PNG，大小不超过50MB</div>
                     </el-upload>
 
                     <el-progress 
@@ -61,9 +62,8 @@
     <script src="https://unpkg.com/element-ui/lib/index.js"></script>
 
     <script>
-        // 配置常量
         const CLOUD_FUNCTION_URL = 'https://analyze-4gbej3877844ea2d-1343742632.ap-shanghai.app.tcloudbase.com/shangchuan';
-        const MAX_FILE_SIZE = 50 * 1024 * 1024; // 50MB
+        const MAX_SIZE = 50 * 1024 * 1024;
 
         new Vue({
             el: '#app',
@@ -72,112 +72,98 @@
                     selectedFile: null,
                     isUploading: false,
                     uploadProgress: 0,
-                    uploadStatus: null,
                     uploadResult: '',
                     uploadSuccess: false
                 };
             },
             methods: {
-                // 处理文件选择
                 handleFileChange(file) {
-                    if (file.size > MAX_FILE_SIZE) {
-                        this.$message.error('文件大小不能超过50MB');
+                    if (file.size > MAX_SIZE) {
+                        this.$message.error('文件大小超过限制');
                         this.selectedFile = null;
                         return;
                     }
                     this.selectedFile = file.raw;
-                    this.resetUploadStatus();
+                    this.resetStatus();
                 },
 
-                // 获取上传凭证（改进版）
-                async getUploadCredentials() {
+                async getCredentials() {
                     try {
-                        const response = await fetch(CLOUD_FUNCTION_URL, {
-                            method: 'POST'  // 明确请求方法
+                        const res = await fetch(CLOUD_FUNCTION_URL, {
+                            method: 'POST'
                         });
-
-                        if (!response.ok) {
-                            const errorData = await response.json().catch(() => ({}));
-                            throw new Error(errorData.message || `请求失败 (${response.status})`);
+                        
+                        if (!res.ok) {
+                            const err = await res.json().catch(() => ({}));
+                            throw new Error(err.message || '凭证获取失败');
                         }
-
-                        return await response.json();
-                    } catch (error) {
-                        console.error('获取凭证失败:', error);
-                        throw new Error(`凭证获取失败: ${error.message}`);
+                        
+                        return await res.json();
+                    } catch (e) {
+                        throw new Error(`凭证请求失败: ${e.message}`);
                     }
                 },
 
-                // 开始上传（优化版）
                 async startUpload() {
                     if (!this.selectedFile) return;
 
                     this.isUploading = true;
-                    this.resetUploadStatus();
+                    this.resetStatus();
 
                     try {
-                        const credentials = await this.getUploadCredentials();
+                        // 获取凭证数据
+                        const { data } = await this.getCredentials();
                         
+                        // 构造表单数据
                         const formData = new FormData();
-                        Object.entries({
-                            key: credentials.key,
-                            policy: credentials.policy,
-                            'q-sign-algorithm': credentials['q-sign-algorithm'],
-                            'q-ak': credentials['q-ak'],
-                            'q-key-time': credentials['q-key-time'],
-                            'q-signature': credentials['q-signature'],
-                            file: this.selectedFile
-                        }).forEach(([key, value]) => formData.append(key, value));
+                        formData.append('key', data.key);
+                        formData.append('policy', data.policy);
+                        formData.append('q-sign-algorithm', data['q-sign-algorithm']);
+                        formData.append('q-ak', data['q-ak']);
+                        formData.append('q-key-time', data['q-key-time']);
+                        formData.append('q-signature', data['q-signature']);
+                        formData.append('file', this.selectedFile);
 
-                        const uploadUrl = `${credentials.url}/${credentials.key}`;
-                        
-                        await this.executeUpload(uploadUrl, formData);
+                        // 执行上传
+                        await this.uploadToCOS(`${data.url}/${data.key}`, formData);
                         
                         this.uploadSuccess = true;
-                        this.uploadResult = `文件上传成功！访问地址：${uploadUrl}`;
-                    } catch (error) {
+                        this.uploadResult = `上传成功！文件地址：${data.url}/${data.key}`;
+                    } catch (e) {
                         this.uploadSuccess = false;
-                        this.uploadResult = error.message;
-                        console.error('上传失败:', error);
+                        this.uploadResult = `上传失败: ${e.message}`;
+                        console.error(e);
                     } finally {
                         this.isUploading = false;
                     }
                 },
 
-                // 执行XHR上传
-                executeUpload(url, formData) {
+                uploadToCOS(url, formData) {
                     return new Promise((resolve, reject) => {
                         const xhr = new XMLHttpRequest();
                         xhr.open('POST', url, true);
 
-                        // 进度处理
                         xhr.upload.onprogress = (e) => {
                             if (e.lengthComputable) {
                                 this.uploadProgress = Math.round((e.loaded / e.total) * 100);
                             }
                         };
 
-                        // 完成处理
                         xhr.onload = () => {
                             if (xhr.status >= 200 && xhr.status < 300) {
                                 resolve();
                             } else {
-                                reject(new Error(`上传失败 (${xhr.status}): ${xhr.statusText}`));
+                                reject(new Error(`上传失败 (${xhr.status})`));
                             }
                         };
 
-                        xhr.onerror = () => {
-                            reject(new Error('网络错误，请检查连接'));
-                        };
-
+                        xhr.onerror = () => reject(new Error('网络连接异常'));
                         xhr.send(formData);
                     });
                 },
 
-                // 重置上传状态
-                resetUploadStatus() {
+                resetStatus() {
                     this.uploadProgress = 0;
-                    this.uploadStatus = null;
                     this.uploadResult = '';
                 }
             }
